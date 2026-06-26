@@ -83,7 +83,7 @@ canvas { position: absolute; top: 0; left: 0; }
 <div id="terminal">
   <div id="header">
     <div id="hdr-title">▌MULTI-PAIR TICK COMPARE</div>
-    <div id="hdr-sub">28 Pairs · Deriv Live · 180s window · normalized from open</div>
+    <div id="hdr-sub">28 Pairs (26 FX + XAG + XAU + BTC + ETH) · Deriv Live · 180s window · normalized from open</div>
     <div id="hdr-right">
       <div class="live-dot" id="live-dot"></div>
       <div class="hdr-meta" id="hdr-time">--:--:--</div>
@@ -116,39 +116,39 @@ const WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1089';
 
 // 28 pairs from OHLC28, mapped to Deriv symbol names
 const PAIRS = [
-  { label:'EUR/USD', sym:'frxEURUSD', color:'#4f8ef7' },
-  { label:'GBP/USD', sym:'frxGBPUSD', color:'#26c97e' },
-  { label:'USD/JPY', sym:'frxUSDJPY', color:'#f59e0b' },
-  { label:'USD/CHF', sym:'frxUSDCHF', color:'#f04f5a' },
+  { label:'AUD/CAD', sym:'frxAUDCAD', color:'#86efac' },
+  { label:'AUD/CHF', sym:'frxAUDCHF', color:'#fde68a' },
+  { label:'AUD/JPY', sym:'frxAUDJPY', color:'#67e8f9' },
+  { label:'AUD/NZD', sym:'frxAUDNZD', color:'#fdba74' },
   { label:'AUD/USD', sym:'frxAUDUSD', color:'#a78bfa' },
-  { label:'USD/CAD', sym:'frxUSDCAD', color:'#34d399' },
-  { label:'NZD/USD', sym:'frxNZDUSD', color:'#fb923c' },
-  { label:'EUR/GBP', sym:'frxEURGBP', color:'#60a5fa' },
-  { label:'EUR/JPY', sym:'frxEURJPY', color:'#f472b6' },
-  { label:'EUR/CHF', sym:'frxEURCHF', color:'#2dd4bf' },
   { label:'EUR/AUD', sym:'frxEURAUD', color:'#fbbf24' },
   { label:'EUR/CAD', sym:'frxEURCAD', color:'#818cf8' },
+  { label:'EUR/CHF', sym:'frxEURCHF', color:'#2dd4bf' },
+  { label:'EUR/GBP', sym:'frxEURGBP', color:'#60a5fa' },
+  { label:'EUR/JPY', sym:'frxEURJPY', color:'#f472b6' },
   { label:'EUR/NZD', sym:'frxEURNZD', color:'#4ade80' },
-  { label:'GBP/JPY', sym:'frxGBPJPY', color:'#f87171' },
-  { label:'GBP/CHF', sym:'frxGBPCHF', color:'#38bdf8' },
+  { label:'EUR/USD', sym:'frxEURUSD', color:'#4f8ef7' },
   { label:'GBP/AUD', sym:'frxGBPAUD', color:'#c084fc' },
   { label:'GBP/CAD', sym:'frxGBPCAD', color:'#a3e635' },
+  { label:'GBP/CHF', sym:'frxGBPCHF', color:'#38bdf8' },
+  { label:'GBP/JPY', sym:'frxGBPJPY', color:'#f87171' },
   { label:'GBP/NZD', sym:'frxGBPNZD', color:'#fb7185' },
-  { label:'AUD/JPY', sym:'frxAUDJPY', color:'#67e8f9' },
-  { label:'AUD/CHF', sym:'frxAUDCHF', color:'#fde68a' },
-  { label:'AUD/CAD', sym:'frxAUDCAD', color:'#86efac' },
-  { label:'AUD/NZD', sym:'frxAUDNZD', color:'#fdba74' },
-  { label:'CHF/JPY', sym:'frxCHFJPY', color:'#93c5fd' },
-  { label:'CAD/JPY', sym:'frxCADJPY', color:'#d946ef' },
+  { label:'GBP/USD', sym:'frxGBPUSD', color:'#26c97e' },
   { label:'NZD/JPY', sym:'frxNZDJPY', color:'#6ee7b7' },
-  { label:'NZD/CHF', sym:'frxNZDCHF', color:'#fca5a5' },
-  { label:'CAD/CHF', sym:'frxCADCHF', color:'#7dd3fc' },
-  { label:'NZD/CAD', sym:'frxNZDCAD', color:'#c4b5fd' },
+  { label:'NZD/USD', sym:'frxNZDUSD', color:'#fb923c' },
+  { label:'USD/CAD', sym:'frxUSDCAD', color:'#34d399' },
+  { label:'USD/CHF', sym:'frxUSDCHF', color:'#f04f5a' },
+  { label:'USD/JPY', sym:'frxUSDJPY', color:'#f59e0b' },
+  { label:'USD/NOK', sym:'frxUSDNOK', color:'#e879f9' },
+  { label:'XAG/USD', sym:'frxXAGUSD', color:'#cbd5e1' },
+  { label:'XAU/USD', sym:'frxXAUUSD', color:'#fcd34d' },
+  { label:'BTC/USD', sym:'cryBTCUSD', color:'#fb923c' },
+  { label:'ETH/USD', sym:'cryETHUSD', color:'#818cf8' },
 ];
 
 const DURATION = 180;  // seconds per cycle
-const PAD      = { l: 44, r: 8, t: 18, b: 28 };
-const LABEL_W  = 58;
+const PAD      = { l: 44, r: 12, t: 18, b: 28 };
+const LABEL_W  = 72;
 
 /* ═══════════════════════════════════════════════
    STATE
@@ -363,31 +363,15 @@ function draw() {
     ctx.fillText(sec + 's', x, H - PAD.b + 12);
   }
 
-  // Axis borders
-  ctx.strokeStyle = '#1a2a3a';
-  ctx.lineWidth   = 1;
-  ctx.beginPath(); ctx.moveTo(PAD.l,  PAD.t);    ctx.lineTo(PAD.l,  H - PAD.b); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(PAD.l,  H - PAD.b); ctx.lineTo(cRight, H - PAD.b); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cRight, PAD.t);    ctx.lineTo(cRight, H - PAD.b); ctx.stroke();
-
-  // ── RED: thick vertical start line ──
-  ctx.save();
-  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-  ctx.strokeStyle = '#ff2244';
-  ctx.lineWidth   = 3;
-  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, H - PAD.b); ctx.stroke();
-  ctx.restore();
-
-  // ── RED: thick horizontal zero line ──
-  const baseY = mapY(0, lo, hi);
-  ctx.save();
-  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-  ctx.strokeStyle = '#ff2244';
-  ctx.lineWidth   = 2;
-  ctx.beginPath(); ctx.moveTo(PAD.l, baseY); ctx.lineTo(cRight, baseY); ctx.stroke();
-  ctx.restore();
-
-  const hasTicks = pairData.some(p => p.ticks.length >= 1);
+  // ── RED: 4-wall border ──
+    ctx.save();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ff2244';
+    ctx.lineWidth   = 2;
+    ctx.strokeRect(PAD.l, PAD.t, cRight - PAD.l, H - PAD.t - PAD.b);
+    ctx.restore();
+  
+    const hasTicks = pairData.some(p => p.ticks.length >= 1);
   if (!hasTicks) {
     // Waiting message
     ctx.fillStyle  = '#2a3f55';
@@ -418,7 +402,16 @@ function draw() {
     ctx.restore();
   });
 
-  // ── Endpoint dots + pair name labels (collision-resolved) ──
+  // ── RED: zero line always on top of pair lines ──
+    const baseY = mapY(0, lo, hi);
+    ctx.save();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ff2244';
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.moveTo(PAD.l, baseY); ctx.lineTo(cRight, baseY); ctx.stroke();
+    ctx.restore();
+  
+    // ── Endpoint dots + pair name labels (collision-resolved) ──
   const endpoints = pairData
     .filter(p => p.ticks.length >= 1)
     .map(p => {
@@ -426,44 +419,49 @@ function draw() {
       return { p, pct: last.pct, lx: mapX(last.elapsed), ly: mapY(last.pct, lo, hi) };
     });
 
-  const sorted  = [...endpoints].sort((a, b) => b.pct - a.pct);
-  const MIN_GAP = 14;
-  const placedY = [];
-  sorted.forEach(ep => {
-    let y = ep.ly;
-    for (let i = 0; i < placedY.length; i++) {
-      if (Math.abs(placedY[i] - y) < MIN_GAP) y = placedY[i] - MIN_GAP;
+  const sorted  = [...endpoints].sort((a, b) => a.ly - b.ly);
+    const MIN_GAP = 13;
+  
+    // Assign initial labelY from natural position
+    sorted.forEach(ep => { ep.labelY = ep.ly; });
+  
+    // Multi-pass push: repeat until no overlaps remain
+    for (let pass = 0; pass < 100; pass++) {
+      let moved = false;
+      for (let i = 1; i < sorted.length; i++) {
+        const a = sorted[i - 1];
+        const b = sorted[i];
+        const overlap = MIN_GAP - (b.labelY - a.labelY);
+        if (overlap > 0) {
+          a.labelY -= overlap / 2;
+          b.labelY += overlap / 2;
+          moved = true;
+        }
+      }
+      if (!moved) break;
     }
-    y = Math.max(PAD.t + 6, Math.min(H - PAD.b - 6, y));
-    ep.labelY = y;
-    placedY.push(y);
-  });
+  
+    // Clamp all labels within chart bounds
+    sorted.forEach(ep => {
+      ep.labelY = Math.max(PAD.t + 6, Math.min(H - PAD.b - 6, ep.labelY));
+    });
 
   endpoints.forEach(ep => {
     const { p, lx, ly, labelY } = ep;
     ctx.save();
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-    // Breathing halo
-    const r = 2.5 + Math.abs(Math.sin(breath + PAIRS.findIndex(x => x.label === p.label))) * 2.5;
-    ctx.beginPath(); ctx.arc(lx, ly, r + 3, 0, Math.PI * 2);
-    ctx.fillStyle = p.color + '20'; ctx.fill();
-
     // Dot
-    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-    ctx.fillStyle = p.color; ctx.fill();
-    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 0.8; ctx.stroke();
+        ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+        ctx.fillStyle = p.color; ctx.fill();
 
-    // Connector if offset
-    if (Math.abs(labelY - ly) > 4) {
-      ctx.strokeStyle = p.color + '44';
-      ctx.lineWidth   = 0.6;
-      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 6, labelY); ctx.stroke();
-    }
+    // Connector always drawn
+        ctx.strokeStyle = p.color + 'aa';
+        ctx.lineWidth   = 1.2;
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 14, labelY); ctx.stroke();
 
     // Label pill
-    const lbx = lx + 9;
+    const lbx = lx + 18;
     ctx.font = 'bold 10px Courier New';
     const tw = ctx.measureText(p.label).width;
     ctx.fillStyle = 'rgba(7,11,18,0.78)';
