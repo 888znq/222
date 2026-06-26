@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tick Compare — 28 Pairs · Deriv Live</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  background: #070b12;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+#terminal {
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  background: #070b12;
+}
+#header {
+  background: #0d1420;
+  border-bottom: 1px solid #1a2a3a;
+  padding: 0 14px;
+  display: flex; align-items: center; gap: 14px;
+  height: 30px; flex-shrink: 0;
+}
+#hdr-title { color: #4a9eff; font-size: 11px; font-weight: 700; letter-spacing: 2px; white-space: nowrap; }
+#hdr-sub   { color: #2a3d52; font-size: 10px; white-space: nowrap; }
+#hdr-right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+.live-dot  { width: 6px; height: 6px; border-radius: 50%; background: #666; flex-shrink: 0; }
+.live-dot.on { background: #22cc66; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.hdr-meta { font-size: 10px; color: #2a3d52; white-space: nowrap; }
+#conn-status { font-size: 10px; color: #556; }
+
+#legend-bar {
+  background: #080d17;
+  border-bottom: 1px solid #111d2a;
+  padding: 0 14px;
+  display: flex; gap: 14px; align-items: center;
+  height: 26px; flex-shrink: 0; overflow-x: auto; overflow-y: hidden;
+}
+#legend-bar::-webkit-scrollbar { height: 2px; }
+#legend-bar::-webkit-scrollbar-thumb { background: #1a2a3a; }
+.leg { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
+.leg-line  { width: 14px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+.leg-name  { font-size: 9px; font-weight: 700; }
+.leg-px    { font-size: 9px; color: #334455; margin-left: 1px; }
+.leg-pct   { font-size: 9px; }
+
+#timer-bar {
+  background: #070b12;
+  padding: 2px 14px;
+  display: flex; align-items: center; gap: 10px;
+  height: 14px; flex-shrink: 0;
+}
+#timer-track { flex: 1; height: 2px; background: #0f1c2a; border-radius: 1px; overflow: hidden; }
+#timer-fill  { height: 100%; width: 0%; background: #4a9eff; border-radius: 1px; transition: width .3s linear; }
+#timer-txt   { font-size: 9px; color: #2a3d52; min-width: 48px; text-align: right; }
+
+#chart-wrap { flex: 1; position: relative; min-height: 0; }
+canvas { position: absolute; top: 0; left: 0; }
+#reset-badge {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  background: rgba(7,11,18,0.96);
+  border: 1px solid #2a4a7a;
+  color: #4a9eff; font-size: 13px; font-weight: 700;
+  padding: 10px 28px; border-radius: 4px;
+  display: none; letter-spacing: 2px; z-index: 10;
+}
+#footer {
+  background: #06090f;
+  border-top: 1px solid #111d2a;
+  padding: 0 14px;
+  display: flex; gap: 20px; align-items: center;
+  height: 22px; flex-shrink: 0;
+}
+.fi   { font-size: 9px; color: #2a3d52; white-space: nowrap; }
+.fi b { color: #3a5570; }
+</style>
+</head>
+<body>
+<div id="terminal">
+  <div id="header">
+    <div id="hdr-title">▌MULTI-PAIR TICK COMPARE</div>
+    <div id="hdr-sub">28 Pairs · Deriv Live · 180s window · normalized from open</div>
+    <div id="hdr-right">
+      <div class="live-dot" id="live-dot"></div>
+      <div class="hdr-meta" id="hdr-time">--:--:--</div>
+      <div class="hdr-meta" id="conn-status">Connecting…</div>
+      <div class="hdr-meta" id="cycle-lbl">Cycle 1</div>
+    </div>
+  </div>
+  <div id="legend-bar"></div>
+  <div id="timer-bar">
+    <div id="timer-track"><div id="timer-fill"></div></div>
+    <div id="timer-txt">0 / 180s</div>
+  </div>
+  <div id="chart-wrap">
+    <canvas id="chart"></canvas>
+    <div id="reset-badge">↺ RESETTING…</div>
+  </div>
+  <div id="footer">
+    <div class="fi">MODE: <b>NORMALIZED %Δ FROM OPEN</b></div>
+    <div class="fi" id="f-leader">LEADER: <b>—</b></div>
+    <div class="fi" id="f-laggard">LAGGARD: <b>—</b></div>
+    <div class="fi" style="margin-left:auto" id="f-spread">MAX SPREAD: <b>—</b></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   CONFIG — extracted from OHLC28
+═══════════════════════════════════════════════ */
+const WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=1089';
+
+// 28 pairs from OHLC28, mapped to Deriv symbol names
+const PAIRS = [
+  { label:'EUR/USD', sym:'frxEURUSD', color:'#4f8ef7' },
+  { label:'GBP/USD', sym:'frxGBPUSD', color:'#26c97e' },
+  { label:'USD/JPY', sym:'frxUSDJPY', color:'#f59e0b' },
+  { label:'USD/CHF', sym:'frxUSDCHF', color:'#f04f5a' },
+  { label:'AUD/USD', sym:'frxAUDUSD', color:'#a78bfa' },
+  { label:'USD/CAD', sym:'frxUSDCAD', color:'#34d399' },
+  { label:'NZD/USD', sym:'frxNZDUSD', color:'#fb923c' },
+  { label:'EUR/GBP', sym:'frxEURGBP', color:'#60a5fa' },
+  { label:'EUR/JPY', sym:'frxEURJPY', color:'#f472b6' },
+  { label:'EUR/CHF', sym:'frxEURCHF', color:'#2dd4bf' },
+  { label:'EUR/AUD', sym:'frxEURAUD', color:'#fbbf24' },
+  { label:'EUR/CAD', sym:'frxEURCAD', color:'#818cf8' },
+  { label:'EUR/NZD', sym:'frxEURNZD', color:'#4ade80' },
+  { label:'GBP/JPY', sym:'frxGBPJPY', color:'#f87171' },
+  { label:'GBP/CHF', sym:'frxGBPCHF', color:'#38bdf8' },
+  { label:'GBP/AUD', sym:'frxGBPAUD', color:'#c084fc' },
+  { label:'GBP/CAD', sym:'frxGBPCAD', color:'#a3e635' },
+  { label:'GBP/NZD', sym:'frxGBPNZD', color:'#fb7185' },
+  { label:'AUD/JPY', sym:'frxAUDJPY', color:'#67e8f9' },
+  { label:'AUD/CHF', sym:'frxAUDCHF', color:'#fde68a' },
+  { label:'AUD/CAD', sym:'frxAUDCAD', color:'#86efac' },
+  { label:'AUD/NZD', sym:'frxAUDNZD', color:'#fdba74' },
+  { label:'CHF/JPY', sym:'frxCHFJPY', color:'#93c5fd' },
+  { label:'CAD/JPY', sym:'frxCADJPY', color:'#d946ef' },
+  { label:'NZD/JPY', sym:'frxNZDJPY', color:'#6ee7b7' },
+  { label:'NZD/CHF', sym:'frxNZDCHF', color:'#fca5a5' },
+  { label:'CAD/CHF', sym:'frxCADCHF', color:'#7dd3fc' },
+  { label:'NZD/CAD', sym:'frxNZDCAD', color:'#c4b5fd' },
+];
+
+const DURATION = 180;  // seconds per cycle
+const PAD      = { l: 44, r: 8, t: 18, b: 28 };
+const LABEL_W  = 58;
+
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+const canvas = document.getElementById('chart');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0;
+
+let cycleNum  = 1;
+let cycleStart = null;   // epoch ms when cycle began
+let resetting  = false;
+let breath     = 0;
+let wsReady    = false;
+
+// Per-pair runtime
+const pairData = PAIRS.map(p => ({
+  ...p,
+  ticks : [],   // { elapsed: seconds from cycle start, pct: % from open }
+  open  : null, // first price seen this cycle
+  price : null,
+}));
+
+const symToIdx = {};
+PAIRS.forEach((p, i) => { symToIdx[p.sym] = i; });
+
+/* ═══════════════════════════════════════════════
+   LEGEND
+═══════════════════════════════════════════════ */
+const legendBar = document.getElementById('legend-bar');
+pairData.forEach(p => {
+  const d = document.createElement('div');
+  d.className = 'leg';
+  d.innerHTML =
+    `<div class="leg-line" style="background:${p.color}"></div>`+
+    `<span class="leg-name" style="color:${p.color}">${p.label}</span>`+
+    `<span class="leg-px"  id="lp-${p.label}">-</span>`+
+    `<span class="leg-pct" id="ld-${p.label}" style="color:#445566">—</span>`;
+  legendBar.appendChild(d);
+});
+
+/* ═══════════════════════════════════════════════
+   DERIV WEBSOCKET
+═══════════════════════════════════════════════ */
+let ws = null;
+let subQueue = [...PAIRS.map(p => p.sym)];
+let subIndex = 0;
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    wsReady = true;
+    document.getElementById('conn-status').textContent = 'Connected';
+    document.getElementById('live-dot').classList.add('on');
+    cycleStart = Date.now();
+    // Subscribe to all 28 pairs, staggered 60ms apart to avoid rate-limit
+    subIndex = 0;
+    subscribeNext();
+  };
+
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.error) return; // ignore subscription errors silently
+    if (msg.msg_type === 'tick') {
+      handleTick(msg.tick);
+    }
+  };
+
+  ws.onerror = () => {
+    document.getElementById('conn-status').textContent = 'Error — retrying…';
+    document.getElementById('live-dot').classList.remove('on');
+  };
+
+  ws.onclose = () => {
+    wsReady = false;
+    document.getElementById('conn-status').textContent = 'Disconnected — retrying…';
+    document.getElementById('live-dot').classList.remove('on');
+    setTimeout(connect, 3000);
+  };
+}
+
+function subscribeNext() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (subIndex >= PAIRS.length) return;
+  const sym = PAIRS[subIndex].sym;
+  ws.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
+  subIndex++;
+  if (subIndex < PAIRS.length) setTimeout(subscribeNext, 60);
+}
+
+function unsubscribeAll() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ forget_all: 'ticks' }));
+  }
+}
+
+function handleTick(tick) {
+  const idx = symToIdx[tick.symbol];
+  if (idx === undefined || resetting) return;
+
+  const p     = pairData[idx];
+  const price = tick.quote;
+  const now   = Date.now();
+
+  if (!cycleStart) cycleStart = now;
+  const elapsed = (now - cycleStart) / 1000;
+
+  // Set open price once per cycle
+  if (p.open === null) p.open = price;
+  p.price = price;
+
+  const pct = (price - p.open) / p.open * 100;
+  p.ticks.push({ elapsed, pct });
+
+  // Update legend
+  const elPx  = document.getElementById('lp-' + p.label);
+  const elPct = document.getElementById('ld-' + p.label);
+  if (elPx)  elPx.textContent  = price.toFixed(price > 10 ? 3 : 5);
+  if (elPct) {
+    elPct.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(3) + '%';
+    elPct.style.color = pct >= 0 ? '#22cc66' : '#ee4444';
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════ */
+function resetCycle() {
+  resetting = true;
+  document.getElementById('reset-badge').style.display = 'block';
+  unsubscribeAll();
+  setTimeout(() => {
+    cycleNum++;
+    cycleStart = Date.now();
+    document.getElementById('cycle-lbl').textContent = 'Cycle ' + cycleNum;
+    pairData.forEach(p => { p.ticks = []; p.open = null; p.price = null; });
+    resetting = false;
+    document.getElementById('reset-badge').style.display = 'none';
+    // Resubscribe
+    subIndex = 0;
+    subscribeNext();
+  }, 800);
+}
+
+/* ═══════════════════════════════════════════════
+   Y RANGE
+═══════════════════════════════════════════════ */
+function getRange() {
+  let lo = 0, hi = 0;
+  pairData.forEach(p => p.ticks.forEach(tk => {
+    if (tk.pct < lo) lo = tk.pct;
+    if (tk.pct > hi) hi = tk.pct;
+  }));
+  const half = Math.max(Math.abs(lo), Math.abs(hi), 0.01);
+  const pad  = half * 0.22 + 0.005;
+  return { lo: -(half + pad), hi: half + pad };
+}
+
+/* ═══════════════════════════════════════════════
+   COORDINATE MAP
+═══════════════════════════════════════════════ */
+function chartRight() { return W - PAD.r - LABEL_W; }
+function mapX(elapsedSec) {
+  return PAD.l + (elapsedSec / DURATION) * (chartRight() - PAD.l);
+}
+function mapY(pct, lo, hi) {
+  const cH = H - PAD.t - PAD.b;
+  return PAD.t + cH - ((pct - lo) / (hi - lo)) * cH;
+}
+
+/* ═══════════════════════════════════════════════
+   DRAW
+═══════════════════════════════════════════════ */
+function draw() {
+  if (!W || !H) return;
+  breath += 0.04;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#070b12';
+  ctx.fillRect(0, 0, W, H);
+
+  const { lo, hi } = getRange();
+  const totalRng   = hi - lo;
+  const cRight     = chartRight();
+  const cH         = H - PAD.t - PAD.b;
+
+  // Horizontal grid + Y labels
+  const hLines = 8;
+  for (let i = 0; i <= hLines; i++) {
+    const v = lo + (i / hLines) * totalRng;
+    const y = mapY(v, lo, hi);
+    ctx.strokeStyle = '#0d1825';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(cRight, y); ctx.stroke();
+    ctx.fillStyle  = '#2a3f55';
+    ctx.font       = '9px Courier New';
+    ctx.textAlign  = 'right';
+    ctx.fillText((v >= 0 ? '+' : '') + v.toFixed(2) + '%', PAD.l - 4, y + 3);
+  }
+
+  // Vertical grid + X labels (time)
+  const vLines = 9;
+  for (let i = 0; i <= vLines; i++) {
+    const x   = PAD.l + (i / vLines) * (cRight - PAD.l);
+    const sec = Math.round((i / vLines) * DURATION);
+    ctx.strokeStyle = '#0d1825';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, H - PAD.b); ctx.stroke();
+    ctx.fillStyle  = '#2a3f55';
+    ctx.font       = '9px Courier New';
+    ctx.textAlign  = 'center';
+    ctx.fillText(sec + 's', x, H - PAD.b + 12);
+  }
+
+  // Axis borders
+  ctx.strokeStyle = '#1a2a3a';
+  ctx.lineWidth   = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.l,  PAD.t);    ctx.lineTo(PAD.l,  H - PAD.b); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(PAD.l,  H - PAD.b); ctx.lineTo(cRight, H - PAD.b); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cRight, PAD.t);    ctx.lineTo(cRight, H - PAD.b); ctx.stroke();
+
+  // ── RED: thick vertical start line ──
+  ctx.save();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ff2244';
+  ctx.lineWidth   = 3;
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, H - PAD.b); ctx.stroke();
+  ctx.restore();
+
+  // ── RED: thick horizontal zero line ──
+  const baseY = mapY(0, lo, hi);
+  ctx.save();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ff2244';
+  ctx.lineWidth   = 2;
+  ctx.beginPath(); ctx.moveTo(PAD.l, baseY); ctx.lineTo(cRight, baseY); ctx.stroke();
+  ctx.restore();
+
+  const hasTicks = pairData.some(p => p.ticks.length >= 1);
+  if (!hasTicks) {
+    // Waiting message
+    ctx.fillStyle  = '#2a3f55';
+    ctx.font       = '11px Courier New';
+    ctx.textAlign  = 'center';
+    ctx.fillText('Waiting for live ticks…', (PAD.l + cRight) / 2, H / 2);
+    updateTimerUI();
+    return;
+  }
+
+  // ── Lines: no shadow, no fill ──
+  pairData.forEach(p => {
+    const ticks = p.ticks;
+    if (ticks.length < 2) return;
+
+    ctx.save();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(mapX(ticks[0].elapsed), mapY(ticks[0].pct, lo, hi));
+    for (let i = 1; i < ticks.length; i++) {
+      ctx.lineTo(mapX(ticks[i].elapsed), mapY(ticks[i].pct, lo, hi));
+    }
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // ── Endpoint dots + pair name labels (collision-resolved) ──
+  const endpoints = pairData
+    .filter(p => p.ticks.length >= 1)
+    .map(p => {
+      const last = p.ticks[p.ticks.length - 1];
+      return { p, pct: last.pct, lx: mapX(last.elapsed), ly: mapY(last.pct, lo, hi) };
+    });
+
+  const sorted  = [...endpoints].sort((a, b) => b.pct - a.pct);
+  const MIN_GAP = 14;
+  const placedY = [];
+  sorted.forEach(ep => {
+    let y = ep.ly;
+    for (let i = 0; i < placedY.length; i++) {
+      if (Math.abs(placedY[i] - y) < MIN_GAP) y = placedY[i] - MIN_GAP;
+    }
+    y = Math.max(PAD.t + 6, Math.min(H - PAD.b - 6, y));
+    ep.labelY = y;
+    placedY.push(y);
+  });
+
+  endpoints.forEach(ep => {
+    const { p, lx, ly, labelY } = ep;
+    ctx.save();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+    // Breathing halo
+    const r = 2.5 + Math.abs(Math.sin(breath + PAIRS.findIndex(x => x.label === p.label))) * 2.5;
+    ctx.beginPath(); ctx.arc(lx, ly, r + 3, 0, Math.PI * 2);
+    ctx.fillStyle = p.color + '20'; ctx.fill();
+
+    // Dot
+    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.fill();
+    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 0.8; ctx.stroke();
+
+    // Connector if offset
+    if (Math.abs(labelY - ly) > 4) {
+      ctx.strokeStyle = p.color + '44';
+      ctx.lineWidth   = 0.6;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 6, labelY); ctx.stroke();
+    }
+
+    // Label pill
+    const lbx = lx + 9;
+    ctx.font = 'bold 10px Courier New';
+    const tw = ctx.measureText(p.label).width;
+    ctx.fillStyle = 'rgba(7,11,18,0.78)';
+    ctx.fillRect(lbx - 2, labelY - 9, tw + 4, 11);
+    ctx.fillStyle  = p.color;
+    ctx.textAlign  = 'left';
+    ctx.fillText(p.label, lbx, labelY);
+
+    ctx.restore();
+  });
+
+  // ── Footer ──
+  const active = pairData.filter(p => p.ticks.length);
+  if (active.length) {
+    const byPct   = [...active].sort((a, b) =>
+      b.ticks[b.ticks.length-1].pct - a.ticks[a.ticks.length-1].pct);
+    const leader  = byPct[0];
+    const laggard = byPct[byPct.length - 1];
+    const lp  = leader.ticks[leader.ticks.length-1].pct;
+    const lgp = laggard.ticks[laggard.ticks.length-1].pct;
+    document.getElementById('f-leader').innerHTML =
+      `LEADER: <b style="color:${leader.color}">${leader.label} (${lp>=0?'+':''}${lp.toFixed(3)}%)</b>`;
+    document.getElementById('f-laggard').innerHTML =
+      `LAGGARD: <b style="color:${laggard.color}">${laggard.label} (${lgp>=0?'+':''}${lgp.toFixed(3)}%)</b>`;
+    document.getElementById('f-spread').innerHTML =
+      `MAX SPREAD: <b>${(lp - lgp).toFixed(3)}%</b>`;
+  }
+
+  updateTimerUI();
+}
+
+function updateTimerUI() {
+  const elapsed = cycleStart ? (Date.now() - cycleStart) / 1000 : 0;
+  document.getElementById('timer-fill').style.width = Math.min(elapsed / DURATION * 100, 100) + '%';
+  document.getElementById('timer-txt').textContent  = Math.min(Math.round(elapsed), DURATION) + ' / 180s';
+  document.getElementById('hdr-time').textContent   = new Date().toTimeString().slice(0, 8);
+
+  if (elapsed >= DURATION && !resetting) resetCycle();
+}
+
+/* ═══════════════════════════════════════════════
+   RESIZE + LOOP
+═══════════════════════════════════════════════ */
+function resize() {
+  const wrap = document.getElementById('chart-wrap');
+  const w = wrap.offsetWidth;
+  const h = wrap.offsetHeight;
+  if (w > 0 && h > 0 && (W !== w || H !== h)) {
+    W = w; H = h;
+    canvas.width  = W;
+    canvas.height = H;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+  }
+}
+
+function loop() {
+  resize();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', resize);
+setTimeout(() => {
+  resize();
+  connect();
+  requestAnimationFrame(loop);
+}, 50);
+</script>
+</body>
+</html>
